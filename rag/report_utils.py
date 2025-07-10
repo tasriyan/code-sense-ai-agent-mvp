@@ -4,7 +4,11 @@ import numpy as np
 
 
 def analyze_query_patterns(test_results: Dict[str, Any]) -> Dict[str, Any]:
-    """Analyze patterns in query performance"""
+    """ Best/worst performing queries identification
+        Distance distribution statistics
+        File type preferences in retrieval
+        Project coverage analysis
+    """
 
     print("\n=== Query Pattern Analysis ===")
 
@@ -71,7 +75,11 @@ def analyze_query_patterns(test_results: Dict[str, Any]) -> Dict[str, Any]:
     return analysis
 
 def calculate_performance_metrics(test_results: Dict[str, Any]) -> Dict[str, Any]:
-    """Calculate performance metrics from test results"""
+    """ Retrieval success rate: % of queries returning results
+        Average distance: Semantic similarity quality
+        Query coverage: How many documents are discoverable
+        Filter effectiveness: How well filters work
+    """
 
     metrics = {
         'retrieval_success_rate': 0,
@@ -118,7 +126,9 @@ def calculate_performance_metrics(test_results: Dict[str, Any]) -> Dict[str, Any
     return metrics
 
 def generate_test_report(test_results: Dict[str, Any]) -> str:
-    """Generate comprehensive test report"""
+    """ Detailed performance report with recommendations
+        JSON results for programmatic analysis
+    """
 
     report = []
     report.append("=" * 60)
