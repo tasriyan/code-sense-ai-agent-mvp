@@ -10,7 +10,11 @@ from vectorization.vector_collection import VectorCollection, EmptyVectorCollect
 
 
 class SemanticVectorDatabase:
-    """Manages the vector database for semantic code classification"""
+    """ Chroma Integration
+        - Persistent storage for the vector database
+        - Sentence-transformers for embeddings (all-MiniLM-L6-v2 default)
+        - Collection management
+    """
 
     def __init__(self,
                  db_path: str = "./chroma_db",

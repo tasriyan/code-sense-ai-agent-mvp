@@ -6,7 +6,11 @@ from typing import List, Dict, Any
 import pandas as pd
 
 def prepare_documents_for_embedding(df: pd.DataFrame) -> List[Dict[str, Any]]:
-    """Prepare classification data for vector storage"""
+    """Semantic Document Preparation
+        - Rich text creation from classification results for better embedding
+        - Metadata preservation for filtering and context
+        - Business-focused text combining purpose, rules, workflows, and integration points
+    """
 
     documents = []
 

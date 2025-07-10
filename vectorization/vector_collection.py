@@ -6,6 +6,7 @@ import numpy as np
 BATCH_SIZE = 100
 
 class VectorCollection:
+    """ Batch processing for large codebases """
     def __init__(self, collection: chromadb.Collection):
         self._collection = collection
 
@@ -41,7 +42,10 @@ class VectorCollection:
         print(f"Successfully added {self._collection.count()} documents to collection")
 
     def semantic_search(self, query: str, n_results: int = 5) -> Dict[str, Any]:
-        """ Perform semantic search on collection """
+        """ Perform semantic search on collection
+            - Result ranking by semantic similarity
+            - Distance metrics for search quality assessment
+        """
         print(f"\n=== Performing Semantic Search ===")
         print(f"Query: '{query}'")
         print(f"Retrieving top {n_results} results...")
@@ -82,7 +86,7 @@ class VectorCollection:
             return {'error': str(e)}
 
     def filtered_retrieval(self, query: str, filters: Dict[str, Any], n_results: int = 5) -> Dict[str, Any]:
-        """Test retrieval with metadata filters"""
+        """ Combined semantic + filter queries """
 
         print(f"\n=== Filtered Retrieval Test ===")
         print(f"Query: '{query}'")
@@ -152,7 +156,10 @@ class VectorCollection:
             }
 
     def get_collection_stats_v1(self) -> Dict[str, Any]:
-        """Get statistics about the collection"""
+        """ - Collection statistics (projects, file types, confidence scores)
+            - Provider comparison across OpenAI/Anthropic/CodeLlama results
+            - Embedding model comparison functionality
+        """
 
         try:
             # Get all documents (limit for stats)
@@ -207,7 +214,10 @@ class VectorCollection:
             return {'error': str(e)}
 
     def get_collection_stats_v2(self) -> Dict[str, Any]:
-        """Get collection statistics"""
+        """ - Collection statistics (projects, file types, confidence scores)
+            - Provider comparison across OpenAI/Anthropic/CodeLlama results
+            - Embedding model comparison functionality
+        """
         try:
             total_count = self._collection.count()
             sample_docs = self._collection.get(limit=100, include=["metadatas"])
