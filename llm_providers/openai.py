@@ -5,37 +5,40 @@ import requests
 
 from classification.classification_result import ClassificationResult as cr
 from llm_providers.llm_provider import LLMProvider
+from llm_providers.utils.prompt_builders import PromptBuilder
+from llm_providers.utils.response_validation import validate_implementation_response, get_fallback_implementation
+
 
 class OpenAIProvider(LLMProvider):
     """OpenAI GPT-4 implementation for code classification"""
 
     def __init__(self, api_key: str, model: str = "gpt-4.1"):
-        self.api_key = api_key
-        self.model = model
-        self.base_url = "https://api.openai.com/v1/chat/completions"
+        self._api_key = api_key
+        self._model = model
+        self._base_url = "https://api.openai.com/v1/chat/completions"
         print(f"Initialized OpenAI provider with model: {model}")
 
     def get_provider_name(self) -> str:
         """Return the name of the LLM provider"""
-        return f"OpenAI-{self.model}"
+        return f"OpenAI-{self._model}"
 
     def classify_code(self, code_file) -> Dict[str, Any]:
         """Classify code using OpenAI GPT-4"""
 
         if code_file.file_type == 'appsettings':
-            messages = self._create_appsettings_messages(code_file)
+            messages = self._create_appsettings_classification_prompt(code_file)
         else:
-            messages = self._create_code_messages(code_file)
+            messages = self._create_classification_prompt(code_file)
 
         try:
             # Make API call to OpenAI
             headers = {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}"
+                "Authorization": f"Bearer {self._api_key}"
             }
 
             payload = {
-                "model": self.model,
+                "model": self._model,
                 "messages": messages,
                 "max_tokens": 1000,
                 "temperature": 0.1,  # Low temperature for consistent structured output
@@ -43,7 +46,7 @@ class OpenAIProvider(LLMProvider):
             }
 
             response = requests.post(
-                self.base_url,
+                self._base_url,
                 headers=headers,
                 json=payload,
                 timeout=60
@@ -71,8 +74,56 @@ class OpenAIProvider(LLMProvider):
             print(f"Error processing OpenAI response: {e}")
             return cr.get_fallback_response(code_file)
 
+    def suggest_coding_implementation(self, user_request: str, context_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Generate implementation using OpenAI GPT-4"""
+
+        system_message = "You are a senior software architect specializing in microservices implementation. Always respond with valid JSON only."
+
+        pb = PromptBuilder()
+        user_message = pb.create_implementation_prompt(user_request, context_docs)
+
+        try:
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self._api_key}"
+            }
+
+            payload = {
+                "model": "gpt-4-turbo",
+                "messages": [
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_message}
+                ],
+                "max_tokens": 2000,
+                "temperature": 0.1,
+                "response_format": {"type": "json_object"}
+            }
+
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=60
+            )
+            response.raise_for_status()
+
+            openai_response = response.json()
+            generated_text = openai_response["choices"][0]["message"]["content"]
+
+            # Parse JSON response
+            try:
+                implementation = json.loads(generated_text)
+            except json.JSONDecodeError:
+                implementation = self._extract_json_from_text(generated_text)
+
+            return validate_implementation_response(implementation)
+
+        except Exception as e:
+            print(f"Error calling OpenAI: {e}")
+            return get_fallback_implementation(user_request)
+
     @staticmethod
-    def _create_code_messages(code_file) -> List[Dict[str, str]]:
+    def _create_classification_prompt(code_file) -> List[Dict[str, str]]:
         """Create OpenAI chat messages for C# code analysis"""
 
         system_message = """You are a senior software architect specializing in business domain analysis. Your task is to analyze C# code from microservices and extract semantic business information.
@@ -119,7 +170,7 @@ Focus on business semantics, not technical implementation details. Return only t
         ]
 
     @staticmethod
-    def _create_appsettings_messages(code_file) -> List[Dict[str, str]]:
+    def _create_appsettings_classification_prompt(code_file) -> List[Dict[str, str]]:
         """Create OpenAI chat messages for appsettings.json analysis"""
 
         system_message = """You are a senior software architect specializing in microservices integration analysis. Your task is to analyze configuration files and extract business integration information.

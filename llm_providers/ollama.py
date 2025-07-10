@@ -1,36 +1,38 @@
 import json
 import requests
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from classification.classification_result import ClassificationResult as cr
 from llm_providers.llm_provider import LLMProvider
+from llm_providers.utils.response_validation import validate_implementation_response, get_fallback_implementation
+from llm_providers.utils.prompt_builders import PromptBuilder
 
 class OllamaProvider(LLMProvider):
     """Ollama local LLM implementation for CodeLlama"""
 
     def __init__(self, model: str = "codellama:7b", base_url: str = "http://localhost:11434"):
-        self.model = model
-        self.base_url = base_url
+        self._model = model
+        self._base_url = base_url
         print(f"Initialized Ollama provider with model: {model}")
 
     def get_provider_name(self) -> str:
         """Return the name of the LLM provider"""
-        return f"Ollama-{self.model}"
+        return f"Ollama-{self._model}"
 
     def classify_code(self, code_file) -> Dict[str, Any]:
         """Classify code using Ollama local LLM"""
 
         if code_file.file_type == 'appsettings':
-            prompt = self._create_appsettings_prompt(code_file)
+            prompt = self._create_appsettings_classification_prompt(code_file)
         else:
-            prompt = self._create_code_prompt(code_file)
+            prompt = self._create_classification_prompt(code_file)
 
         try:
             # Make API call to Ollama
             response = requests.post(
-                f"{self.base_url}/api/generate",
+                f"{self._base_url}/api/generate",
                 json={
-                    "model": self.model,
+                    "model": self._model,
                     "prompt": prompt,
                     "stream": False,
                     "format": "json"
@@ -61,8 +63,42 @@ class OllamaProvider(LLMProvider):
             print(f"Error processing Ollama response: {e}")
             return cr.get_fallback_response(code_file)
 
+    def suggest_coding_implementation(self, user_request: str, context_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Generate implementation using Ollama/CodeLlama"""
+
+        pb = PromptBuilder()
+        prompt = pb.create_implementation_prompt(user_request, context_docs)
+
+        try:
+            response = requests.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": "codellama:7b",
+                    "prompt": prompt,
+                    "stream": False,
+                    "format": "json"
+                },
+                timeout=120
+            )
+            response.raise_for_status()
+
+            ollama_response = response.json()
+            generated_text = ollama_response.get('response', '')
+
+            # Parse JSON response
+            try:
+                implementation = json.loads(generated_text)
+            except json.JSONDecodeError:
+                implementation = self._extract_json_from_text(generated_text)
+
+            return validate_implementation_response(implementation)
+
+        except Exception as e:
+            print(f"Error calling Ollama: {e}")
+            return get_fallback_implementation(user_request)
+
     @staticmethod
-    def _create_code_prompt(code_file) -> str:
+    def _create_classification_prompt(code_file) -> str:
         """Create prompt for C# code analysis"""
         return f"""You are a senior software architect analyzing a C# code file from a loyalty points microservice.
 
@@ -90,7 +126,7 @@ Analyze this code and extract business semantic information. Return ONLY a valid
 Focus on business semantics, not technical implementation details. Return only the JSON, no additional text."""
 
     @staticmethod
-    def _create_appsettings_prompt(code_file) -> str:
+    def _create_appsettings_classification_prompt(code_file) -> str:
         """Create prompt for appsettings.json analysis"""
         return f"""You are a senior software architect analyzing an appsettings.json file from a loyalty points microservice.
 

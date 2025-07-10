@@ -1,43 +1,45 @@
 import json
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 import requests
 
 from classification.classification_result import ClassificationResult as cr
 from llm_providers.llm_provider import LLMProvider
+from llm_providers.utils.response_validation import validate_implementation_response, get_fallback_implementation
+from llm_providers.utils.prompt_builders import PromptBuilder
 
 
 class AnthropicProvider(LLMProvider):
     """Anthropic Claude implementation for code classification"""
 
     def __init__(self, api_key: str, model: str = "claude-3-5-sonnet-20241022"):
-        self.api_key = api_key
-        self.model = model
-        self.base_url = "https://api.anthropic.com/v1/messages"
+        self._api_key = api_key
+        self._model = model
+        self._base_url = "https://api.anthropic.com/v1/messages"
         print(f"Initialized Anthropic provider with model: {model}")
 
     def get_provider_name(self) -> str:
         """Return the name of the LLM provider"""
-        return f"Anthropic-{self.model}"
+        return f"Anthropic-{self._model}"
 
     def classify_code(self, code_file) -> Dict[str, Any]:
         """Classify code using Anthropic Claude"""
 
         if code_file.file_type == 'appsettings':
-            prompt = self._create_appsettings_prompt(code_file)
+            prompt = self._create_appsettings_classification_prompt(code_file)
         else:
-            prompt = self._create_code_prompt(code_file)
+            prompt = self._create_classification_prompt(code_file)
 
         try:
             # Make API call to Anthropic
             headers = {
                 "Content-Type": "application/json",
-                "x-api-key": self.api_key,
+                "x-api-key": self._api_key,
                 "anthropic-version": "2023-06-01"
             }
 
             payload = {
-                "model": self.model,
+                "model": self._model,
                 "max_tokens": 1000,
                 "temperature": 0.1,  # Low temperature for consistent structured output
                 "messages": [
@@ -49,7 +51,7 @@ class AnthropicProvider(LLMProvider):
             }
 
             response = requests.post(
-                self.base_url,
+                self._base_url,
                 headers=headers,
                 json=payload,
                 timeout=60
@@ -77,8 +79,51 @@ class AnthropicProvider(LLMProvider):
             print(f"Error processing Anthropic response: {e}")
             return cr.get_fallback_response(code_file)
 
+    def suggest_coding_implementation(self, user_request: str, context_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Generate implementation using Anthropic Claude"""
+
+        pb = PromptBuilder()
+        prompt = pb.create_implementation_prompt(user_request, context_docs)
+
+        try:
+            headers = {
+                "Content-Type": "application/json",
+                "x-api-key": self._api_key,
+                "anthropic-version": "2023-06-01"
+            }
+
+            payload = {
+                "model": "claude-3-5-sonnet-20241022",
+                "max_tokens": 2000,
+                "temperature": 0.1,
+                "messages": [{"role": "user", "content": prompt}]
+            }
+
+            response = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers=headers,
+                json=payload,
+                timeout=60
+            )
+            response.raise_for_status()
+
+            anthropic_response = response.json()
+            generated_text = anthropic_response["content"][0]["text"]
+
+            # Parse JSON response
+            try:
+                implementation = json.loads(generated_text)
+            except json.JSONDecodeError:
+                implementation = self._extract_json_from_text(generated_text)
+
+            return validate_implementation_response(implementation)
+
+        except Exception as e:
+            print(f"Error calling Anthropic: {e}")
+            return get_fallback_implementation(user_request)
+
     @staticmethod
-    def _create_code_prompt(code_file) -> str:
+    def _create_classification_prompt(code_file) -> str:
         """Create Claude-optimized prompt for C# code analysis"""
         return f"""I need you to analyze a C# code file from a loyalty points microservice and extract business semantic information.
 
@@ -119,7 +164,7 @@ Return your analysis as a JSON object with this exact structure:
 Focus on the business semantics and domain logic, not just technical implementation details. Return only the JSON object, no additional explanation."""
 
     @staticmethod
-    def _create_appsettings_prompt(code_file) -> str:
+    def _create_appsettings_classification_prompt(code_file) -> str:
         """Create Claude-optimized prompt for appsettings.json analysis"""
         return f"""I need you to analyze an appsettings.json configuration file from a loyalty points microservice.
 

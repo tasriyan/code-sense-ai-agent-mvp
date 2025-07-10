@@ -55,8 +55,7 @@ class VectorCollection:
                 query_texts=[query],
                 n_results=n_results,
                 include=["documents", "metadatas", "distances"]
-            )
-
+            ) 
             print(f"\nFound {len(results['ids'][0])} results:")
 
             for i, (doc_id, document, metadata, distance) in enumerate(zip(
