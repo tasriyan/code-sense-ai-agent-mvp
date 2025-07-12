@@ -2,12 +2,11 @@ import json
 import requests
 from typing import Dict, Any, List
 
-from classification.classification_result import ClassificationResult as cr
-from llm_providers.llm_provider import LLMProvider
+from llm_providers.llm_provider import LLMClassifier, LLMExecutor
 from llm_providers.utils.response_validation import validate_implementation_response, get_fallback_implementation
 from llm_providers.utils.prompt_builders import PromptBuilder
 
-class OllamaProvider(LLMProvider):
+class OllamaClassifier(LLMClassifier):
     """Ollama local LLM implementation for CodeLlama"""
 
     def __init__(self, model: str = "codellama:7b", base_url: str = "http://localhost:11434"):
@@ -53,49 +52,15 @@ class OllamaProvider(LLMProvider):
                 classification = self._extract_json_from_text(generated_text)
 
             # Validate and normalize the response
-            return cr.normalize_classification_response(classification)
+            return self._normalize_classification_response(classification)
 
         except requests.exceptions.RequestException as e:
             print(f"Error calling Ollama API: {e}")
             # Fallback to basic response if API fails
-            return cr.get_fallback_response(code_file)
+            return self._get_fallback_response(code_file)
         except Exception as e:
             print(f"Error processing Ollama response: {e}")
-            return cr.get_fallback_response(code_file)
-
-    def suggest_coding_implementation(self, user_request: str, context_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Generate implementation using Ollama/CodeLlama"""
-
-        pb = PromptBuilder()
-        prompt = pb.create_implementation_prompt(user_request, context_docs)
-
-        try:
-            response = requests.post(
-                "http://localhost:11434/api/generate",
-                json={
-                    "model": "codellama:7b",
-                    "prompt": prompt,
-                    "stream": False,
-                    "format": "json"
-                },
-                timeout=120
-            )
-            response.raise_for_status()
-
-            ollama_response = response.json()
-            generated_text = ollama_response.get('response', '')
-
-            # Parse JSON response
-            try:
-                implementation = json.loads(generated_text)
-            except json.JSONDecodeError:
-                implementation = self._extract_json_from_text(generated_text)
-
-            return validate_implementation_response(implementation)
-
-        except Exception as e:
-            print(f"Error calling Ollama: {e}")
-            return get_fallback_implementation(user_request)
+            return self._get_fallback_response(code_file)
 
     @staticmethod
     def _create_classification_prompt(code_file) -> str:
@@ -153,8 +118,7 @@ Analyze this configuration and extract business integration information. Return 
 
 Focus on business impact of these configurations. Return only the JSON, no additional text."""
 
-    @staticmethod
-    def _extract_json_from_text(text: str) -> Dict[str, Any]:
+    def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
         """Extract JSON from text that might contain additional content"""
         try:
             # Try to find JSON block in the text
@@ -166,7 +130,71 @@ Focus on business impact of these configurations. Return only the JSON, no addit
                 return json.loads(json_str)
             else:
                 # If no JSON found, return empty structure
-                return cr.get_empty_classification()
+                return self._get_empty_classification()
 
         except Exception:
-            return cr.get_empty_classification()
+            return self._get_empty_classification()
+
+
+class OllamaExecutor(LLMExecutor):
+    """Ollama local LLM implementation for CodeLlama"""
+
+    def __init__(self, model: str = "codellama:7b", base_url: str = "http://localhost:11434"):
+        self._model = model
+        self._base_url = base_url
+        print(f"Initialized Ollama provider with model: {model}")
+
+    def get_provider_name(self) -> str:
+        """Return the name of the LLM provider"""
+        return f"Ollama-{self._model}"
+
+    def suggest_coding_implementation(self, user_request: str, context_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Generate implementation using Ollama/CodeLlama"""
+
+        pb = PromptBuilder()
+        prompt = pb.create_implementation_prompt(user_request, context_docs)
+
+        try:
+            response = requests.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": "codellama:7b",
+                    "prompt": prompt,
+                    "stream": False,
+                    "format": "json"
+                },
+                timeout=120
+            )
+            response.raise_for_status()
+
+            ollama_response = response.json()
+            generated_text = ollama_response.get('response', '')
+
+            # Parse JSON response
+            try:
+                implementation = json.loads(generated_text)
+            except json.JSONDecodeError:
+                implementation = self._extract_json_from_text(generated_text)
+
+            return validate_implementation_response(implementation)
+
+        except Exception as e:
+            print(f"Error calling Ollama: {e}")
+            return get_fallback_implementation(user_request)
+
+    def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
+        """Extract JSON from text that might contain additional content"""
+        try:
+            # Try to find JSON block in the text
+            start_idx = text.find('{')
+            end_idx = text.rfind('}') + 1
+
+            if start_idx != -1 and end_idx != 0:
+                json_str = text[start_idx:end_idx]
+                return json.loads(json_str)
+            else:
+                # If no JSON found, return empty structure
+                return self._get_empty_implementation()
+
+        except Exception:
+            return self._get_empty_implementation()

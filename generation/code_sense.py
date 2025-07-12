@@ -2,7 +2,7 @@ from datetime import datetime
 
 from generation.implementation_suggestion import ImplementationSuggestion
 from generation.semantic_data_retriever import SemanticDataRetriever
-from llm_providers.llm_provider import LLMProvider
+from llm_providers.llm_provider import LLMExecutor
 
 
 class CodeSenseImplementationGenerator:
@@ -10,7 +10,7 @@ class CodeSenseImplementationGenerator:
 
     def __init__(self,
                  retriever: SemanticDataRetriever,
-                 llm_provider: LLMProvider):
+                 llm_provider: LLMExecutor):
         self.retriever = retriever
         self.llm_provider = llm_provider
 

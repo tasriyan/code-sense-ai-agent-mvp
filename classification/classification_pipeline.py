@@ -5,14 +5,14 @@ from typing import List
 
 from classification.classification_result import ClassificationResult as cr, ClassificationResult
 from classification.code_scanner import CodeScanner
-from llm_providers.llm_provider import LLMProvider
+from llm_providers.llm_provider import LLMClassifier
 
 
 class ClassificationPipeline:
     """Main pipeline for code classification"""
 
     def __init__(self,
-                 provider: LLMProvider,
+                 provider: LLMClassifier,
                  scanner: CodeScanner,
                  output_csv: str, intermediate_dir: str):
         self.output_csv = output_csv
@@ -85,7 +85,7 @@ class ClassificationPipeline:
             'file_path', 'project_name', 'file_type', 'business_purpose',
             'business_rules', 'business_triggers', 'business_data',
             'integration_points', 'business_workflow', 'technical_pattern',
-            'code_snippet', 'llm_provider', 'classification_confidence'
+            'llm_provider', 'classification_confidence'
         ]
 
         with open(self.output_csv, 'w', newline='', encoding='utf-8') as csvfile:
@@ -104,7 +104,6 @@ class ClassificationPipeline:
                     'integration_points': '|'.join(result.integration_points),
                     'business_workflow': result.business_workflow,
                     'technical_pattern': result.technical_pattern,
-                    'code_snippet': result.code_snippet,
                     'llm_provider': result.llm_provider,
                     'classification_confidence': result.classification_confidence
                 })

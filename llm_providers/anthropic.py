@@ -3,13 +3,12 @@ from typing import Dict, Any, List
 
 import requests
 
-from classification.classification_result import ClassificationResult as cr
-from llm_providers.llm_provider import LLMProvider
+from llm_providers.llm_provider import LLMClassifier, LLMExecutor
 from llm_providers.utils.response_validation import validate_implementation_response, get_fallback_implementation
 from llm_providers.utils.prompt_builders import PromptBuilder
 
 
-class AnthropicProvider(LLMProvider):
+class AnthropicClassifier(LLMClassifier):
     """Anthropic Claude implementation for code classification"""
 
     def __init__(self, api_key: str, model: str = "claude-3-5-sonnet-20241022"):
@@ -70,57 +69,14 @@ class AnthropicProvider(LLMProvider):
                 classification = self._extract_json_from_text(generated_text)
 
             # Validate and normalize the response
-            return cr.normalize_classification_response(classification)
+            return self._normalize_classification_response(classification)
 
         except requests.exceptions.RequestException as e:
             print(f"Error calling Anthropic API: {e}")
-            return cr.get_fallback_response(code_file)
+            return self._get_fallback_response(code_file)
         except Exception as e:
             print(f"Error processing Anthropic response: {e}")
-            return cr.get_fallback_response(code_file)
-
-    def suggest_coding_implementation(self, user_request: str, context_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Generate implementation using Anthropic Claude"""
-
-        pb = PromptBuilder()
-        prompt = pb.create_implementation_prompt(user_request, context_docs)
-
-        try:
-            headers = {
-                "Content-Type": "application/json",
-                "x-api-key": self._api_key,
-                "anthropic-version": "2023-06-01"
-            }
-
-            payload = {
-                "model": "claude-3-5-sonnet-20241022",
-                "max_tokens": 2000,
-                "temperature": 0.1,
-                "messages": [{"role": "user", "content": prompt}]
-            }
-
-            response = requests.post(
-                "https://api.anthropic.com/v1/messages",
-                headers=headers,
-                json=payload,
-                timeout=60
-            )
-            response.raise_for_status()
-
-            anthropic_response = response.json()
-            generated_text = anthropic_response["content"][0]["text"]
-
-            # Parse JSON response
-            try:
-                implementation = json.loads(generated_text)
-            except json.JSONDecodeError:
-                implementation = self._extract_json_from_text(generated_text)
-
-            return validate_implementation_response(implementation)
-
-        except Exception as e:
-            print(f"Error calling Anthropic: {e}")
-            return get_fallback_implementation(user_request)
+            return self._get_fallback_response(code_file)
 
     @staticmethod
     def _create_classification_prompt(code_file) -> str:
@@ -204,8 +160,7 @@ Return your analysis as a JSON object with this exact structure:
 
 Focus on the business impact and integration semantics of these configurations. Return only the JSON object, no additional explanation."""
 
-    @staticmethod
-    def _extract_json_from_text(text: str) -> Dict[str, Any]:
+    def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
         """Extract JSON from Claude's response that might contain additional content"""
         try:
             # Claude sometimes wraps JSON in code blocks
@@ -226,7 +181,91 @@ Focus on the business impact and integration semantics of these configurations. 
                 json_str = text[start_idx:end_idx]
                 return json.loads(json_str)
             else:
-                return cr.get_empty_classification()
+                return self._get_empty_classification()
 
         except Exception:
-            return cr.get_empty_classification()
+            return self._get_empty_classification()
+
+
+class AnthropicExecutor(LLMExecutor):
+    """Anthropic Claude implementation for code classification"""
+
+    def __init__(self, api_key: str, model: str = "claude-3-5-sonnet-20241022"):
+        self._api_key = api_key
+        self._model = model
+        self._base_url = "https://api.anthropic.com/v1/messages"
+        print(f"Initialized Anthropic provider with model: {model}")
+
+    def get_provider_name(self) -> str:
+        """Return the name of the LLM provider"""
+        return f"Anthropic-{self._model}"
+
+    def suggest_coding_implementation(self, user_request: str, context_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Generate implementation using Anthropic Claude"""
+
+        pb = PromptBuilder()
+        prompt = pb.create_implementation_prompt(user_request, context_docs)
+
+        try:
+            headers = {
+                "Content-Type": "application/json",
+                "x-api-key": self._api_key,
+                "anthropic-version": "2023-06-01"
+            }
+
+            payload = {
+                "model": self._model,
+                "max_tokens": 2000,
+                "temperature": 0.1,
+                "messages": [{"role": "user", "content": prompt}]
+            }
+
+            response = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers=headers,
+                json=payload,
+                timeout=60
+            )
+            response.raise_for_status()
+
+            anthropic_response = response.json()
+            generated_text = anthropic_response["content"][0]["text"]
+
+            # Parse JSON response
+            try:
+                implementation = json.loads(generated_text)
+            except json.JSONDecodeError:
+                implementation = self._extract_json_from_text(generated_text)
+
+            return validate_implementation_response(implementation)
+
+        except Exception as e:
+            print(f"Error calling Anthropic: {e}")
+            return get_fallback_implementation(user_request)
+
+    def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
+        """Extract JSON from Claude's response that might contain additional content"""
+        try:
+            # Claude sometimes wraps JSON in code blocks
+            if "```json" in text:
+                start_marker = "```json"
+                end_marker = "```"
+                start_idx = text.find(start_marker) + len(start_marker)
+                end_idx = text.find(end_marker, start_idx)
+                if end_idx != -1:
+                    json_str = text[start_idx:end_idx].strip()
+                    return json.loads(json_str)
+
+            # Try to find JSON object in the text
+            start_idx = text.find('{')
+            end_idx = text.rfind('}') + 1
+
+            if start_idx != -1 and end_idx != 0:
+                json_str = text[start_idx:end_idx]
+                return json.loads(json_str)
+            else:
+                return self._get_empty_implementation()
+
+        except Exception:
+            return self._get_empty_implementation()
+

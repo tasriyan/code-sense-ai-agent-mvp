@@ -3,13 +3,12 @@ from typing import Dict, Any, List
 
 import requests
 
-from classification.classification_result import ClassificationResult as cr
-from llm_providers.llm_provider import LLMProvider
+from llm_providers.llm_provider import LLMClassifier, LLMExecutor
 from llm_providers.utils.prompt_builders import PromptBuilder
 from llm_providers.utils.response_validation import validate_implementation_response, get_fallback_implementation
 
 
-class OpenAIProvider(LLMProvider):
+class OpenAIClassifier(LLMClassifier):
     """OpenAI GPT-4 implementation for code classification"""
 
     def __init__(self, api_key: str, model: str = "gpt-4.1"):
@@ -65,62 +64,14 @@ class OpenAIProvider(LLMProvider):
                 classification = self._extract_json_from_text(generated_text)
 
             # Validate and normalize the response
-            return cr.normalize_classification_response(classification)
+            return self._normalize_classification_response(classification)
 
         except requests.exceptions.RequestException as e:
             print(f"Error calling OpenAI API: {e}")
-            return cr.get_fallback_response(code_file)
+            return self._get_fallback_response(code_file)
         except Exception as e:
             print(f"Error processing OpenAI response: {e}")
-            return cr.get_fallback_response(code_file)
-
-    def suggest_coding_implementation(self, user_request: str, context_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Generate implementation using OpenAI GPT-4"""
-
-        system_message = "You are a senior software architect specializing in microservices implementation. Always respond with valid JSON only."
-
-        pb = PromptBuilder()
-        user_message = pb.create_implementation_prompt(user_request, context_docs)
-
-        try:
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self._api_key}"
-            }
-
-            payload = {
-                "model": "gpt-4-turbo",
-                "messages": [
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": user_message}
-                ],
-                "max_tokens": 2000,
-                "temperature": 0.1,
-                "response_format": {"type": "json_object"}
-            }
-
-            response = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=60
-            )
-            response.raise_for_status()
-
-            openai_response = response.json()
-            generated_text = openai_response["choices"][0]["message"]["content"]
-
-            # Parse JSON response
-            try:
-                implementation = json.loads(generated_text)
-            except json.JSONDecodeError:
-                implementation = self._extract_json_from_text(generated_text)
-
-            return validate_implementation_response(implementation)
-
-        except Exception as e:
-            print(f"Error calling OpenAI: {e}")
-            return get_fallback_implementation(user_request)
+            return self._get_fallback_response(code_file)
 
     @staticmethod
     def _create_classification_prompt(code_file) -> List[Dict[str, str]]:
@@ -215,8 +166,7 @@ Focus on business impact of these configurations. Return only the JSON object.""
             {"role": "user", "content": user_message}
         ]
 
-    @staticmethod
-    def _extract_json_from_text(text: str) -> Dict[str, Any]:
+    def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
         """Extract JSON from OpenAI response that might contain additional content"""
         try:
             # OpenAI with response_format should return pure JSON, but handle edge cases
@@ -231,9 +181,88 @@ Focus on business impact of these configurations. Return only the JSON object.""
                 json_str = text[start_idx:end_idx]
                 return json.loads(json_str)
             else:
-                return cr.get_empty_classification()
+                return self._get_empty_classification()
 
         except Exception:
-            return cr.get_empty_classification()
+            return self._get_empty_classification()
 
-        return normalized
+class OpenAIExecutor(LLMExecutor):
+    """OpenAI GPT-4 implementation for code classification"""
+
+    def __init__(self, api_key: str, model: str = "gpt-4.1"):
+        self._api_key = api_key
+        self._model = model
+        self._base_url = "https://api.openai.com/v1/chat/completions"
+        print(f"Initialized OpenAI provider with model: {model}")
+
+    def get_provider_name(self) -> str:
+        """Return the name of the LLM provider"""
+        return f"OpenAI-{self._model}"
+
+    def suggest_coding_implementation(self, user_request: str, context_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Generate implementation using OpenAI GPT-4"""
+
+        system_message = "You are a senior software architect specializing in microservices implementation. Always respond with valid JSON only."
+
+        pb = PromptBuilder()
+        user_message = pb.create_implementation_prompt(user_request, context_docs)
+
+        try:
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self._api_key}"
+            }
+
+            payload = {
+                "model": "gpt-4-turbo",
+                "messages": [
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_message}
+                ],
+                "max_tokens": 2000,
+                "temperature": 0.1,
+                "response_format": {"type": "json_object"}
+            }
+
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=60
+            )
+            response.raise_for_status()
+
+            openai_response = response.json()
+            generated_text = openai_response["choices"][0]["message"]["content"]
+
+            # Parse JSON response
+            try:
+                implementation = json.loads(generated_text)
+            except json.JSONDecodeError:
+                implementation = self._extract_json_from_text(generated_text)
+
+            return validate_implementation_response(implementation)
+
+        except Exception as e:
+            print(f"Error calling OpenAI: {e}")
+            return get_fallback_implementation(user_request)
+
+    def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
+        """Extract JSON from OpenAI response that might contain additional content"""
+        try:
+            # OpenAI with response_format should return pure JSON, but handle edge cases
+            if text.strip().startswith('{') and text.strip().endswith('}'):
+                return json.loads(text.strip())
+
+            # Try to find JSON object in the text
+            start_idx = text.find('{')
+            end_idx = text.rfind('}') + 1
+
+            if start_idx != -1 and end_idx != 0:
+                json_str = text[start_idx:end_idx]
+                return json.loads(json_str)
+            else:
+                return self._get_empty_implementation()
+
+        except Exception:
+            return self._get_empty_implementation()
