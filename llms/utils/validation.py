@@ -1,7 +1,7 @@
 from typing import Dict, Any
 
 
-def validate_implementation_response(implementation: Dict[str, Any]) -> Dict[str, Any]:
+def get_validated_answer(implementation: Dict[str, Any]) -> Dict[str, Any]:
     """Validate and normalize implementation response"""
     required_fields = [
         'suggested_service', 'suggested_files', 'implementation_steps',
@@ -24,7 +24,7 @@ def validate_implementation_response(implementation: Dict[str, Any]) -> Dict[str
     return implementation
 
 
-def get_fallback_implementation(user_request: str) -> Dict[str, Any]:
+def get_fallback_answer(user_request: str) -> Dict[str, Any]:
     """Fallback implementation when LLM fails"""
     return {
         "suggested_service": "LoyaltyPoints",

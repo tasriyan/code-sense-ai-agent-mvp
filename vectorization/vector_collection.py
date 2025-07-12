@@ -3,6 +3,8 @@ from typing import List, Dict, Any
 import chromadb
 import numpy as np
 
+from vectorization.semantic_match import SemanticMatch
+
 BATCH_SIZE = 100
 
 class VectorCollection:
@@ -41,7 +43,7 @@ class VectorCollection:
 
         print(f"Successfully added {self._collection.count()} documents to collection")
 
-    def semantic_search(self, query: str, n_results: int = 5) -> Dict[str, Any]:
+    def semantic_search(self, query: str, n_results: int = 5) -> SemanticMatch:
         """ Perform semantic search on collection
             - Result ranking by semantic similarity
             - Distance metrics for search quality assessment
@@ -55,36 +57,24 @@ class VectorCollection:
                 query_texts=[query],
                 n_results=n_results,
                 include=["documents", "metadatas", "distances"]
-            ) 
+            )
+            if not results['ids'][0]:
+                return SemanticMatch(query=query, results=None, filters={}, summary={'total_results': 0, 'message': 'No results found.'})
+
             print(f"\nFound {len(results['ids'][0])} results:")
 
-            for i, (doc_id, document, metadata, distance) in enumerate(zip(
-                    results['ids'][0],
-                    results['documents'][0],
-                    results['metadatas'][0],
-                    results['distances'][0]
-            )):
-                print(f"\n--- Result {i + 1} (Distance: {distance:.4f}) ---")
-                print(f"File: {metadata.get('file_path', 'Unknown')}")
-                print(f"Business Purpose: {metadata.get('business_purpose', 'Unknown')}")
-                print(f"Technical Pattern: {metadata.get('technical_pattern', 'Unknown')}")
-                print(f"Business Workflow: {metadata.get('business_workflow', 'Unknown')[:100]}...")
-
-            return {
-                'query': query,
-                'results': results,
-                'summary': {
-                    'total_results': len(results['ids'][0]),
-                    'avg_distance': np.mean(results['distances'][0]) if results['distances'][0] else 0,
-                    'files_found': [meta.get('file_path') for meta in results['metadatas'][0]]
-                }
-            }
+            return SemanticMatch(query=query, results=results, filters={},
+                                 summary={
+                        'total_results': len(results['ids'][0]),
+                        'avg_distance': np.mean(results['distances'][0]) if results['distances'][0] else 0,
+                        'files_found': [meta.get('file_path') for meta in results['metadatas'][0]]
+                    })
 
         except Exception as e:
             print(f"Error during semantic search: {e}")
-            return {'error': str(e)}
+            return SemanticMatch(query=query, results=None, filters={}, summary={'total_results': 0, 'error': str(e)})
 
-    def filtered_retrieval(self, query: str, filters: Dict[str, Any], n_results: int = 5) -> Dict[str, Any]:
+    def filtered_semantic_search(self, query: str, filters: Dict[str, Any], n_results: int = 5) -> SemanticMatch:
         """ Combined semantic + filter queries """
 
         print(f"\n=== Filtered Retrieval Test ===")
@@ -99,60 +89,20 @@ class VectorCollection:
                 where=filters,
                 include=["documents", "metadatas", "distances"]
             )
-
             if not results['ids'][0]:
-                return {
-                    'query': query,
-                    'filters': filters,
-                    'results': [],
-                    'summary': {'total_results': 0, 'message': 'No results found with filters'}
-                }
+                return SemanticMatch(query=query, results=None, filters=filters, summary={'total_results': 0, 'message': 'No results found with filters'})
 
             print(f"\nFound {len(results['ids'][0])} results with filters:")
 
-            retrieved_docs = []
-            for i, (doc_id, document, metadata, distance) in enumerate(zip(
-                    results['ids'][0],
-                    results['documents'][0],
-                    results['metadatas'][0],
-                    results['distances'][0]
-            )):
-                print(f"\n--- Filtered Result {i + 1} (Distance: {distance:.4f}) ---")
-                print(f"File: {metadata.get('file_path', 'Unknown')}")
-                print(f"Project: {metadata.get('project_name', 'Unknown')}")
-                print(f"File Type: {metadata.get('file_type', 'Unknown')}")
-                print(f"Business Purpose: {metadata.get('business_purpose', 'Unknown')[:100]}...")
-
-                retrieved_docs.append({
-                    'id': doc_id,
-                    'file_path': metadata.get('file_path', 'Unknown'),
-                    'project_name': metadata.get('project_name', 'Unknown'),
-                    'file_type': metadata.get('file_type', 'Unknown'),
-                    'business_purpose': metadata.get('business_purpose', 'Unknown'),
-                    'distance': distance,
-                    'document': document
-                })
-
-            return {
-                'query': query,
-                'filters': filters,
-                'results': retrieved_docs,
-                'summary': {
-                    'total_results': len(results['ids'][0]),
-                    'avg_distance': np.mean(results['distances'][0]),
-                    'files_found': [doc['file_path'] for doc in retrieved_docs]
-                }
-            }
+            return SemanticMatch(query=query, results=results, filters=filters,
+                                 summary={'total_results': len(results['ids'][0]),
+                                                'avg_distance': np.mean(results['distances'][0]),
+                                                'files_found': [doc['file_path'] for doc in results['metadatas'][0]]
+                                            })
 
         except Exception as e:
             print(f"Error during filtered retrieval: {e}")
-            return {
-                'query': query,
-                'filters': filters,
-                'error': str(e),
-                'results': [],
-                'summary': {'total_results': 0, 'error': str(e)}
-            }
+            return SemanticMatch(query=query, results=None, filters=filters, summary={'total_results': 0, 'error': str(e)})
 
     def get_collection_stats_v1(self) -> Dict[str, Any]:
         """ - Collection statistics (projects, file types, confidence scores)
@@ -174,7 +124,7 @@ class VectorCollection:
                 'total_documents': self._collection.count(),
                 'projects': {},
                 'file_types': {},
-                'llm_providers': {},
+                'llms': {},
                 'technical_patterns': {},
                 'avg_confidence': 0
             }
@@ -192,7 +142,7 @@ class VectorCollection:
 
                 # LLM provider distribution
                 provider = metadata.get('llm_provider', 'Unknown')
-                stats['llm_providers'][provider] = stats['llm_providers'].get(provider, 0) + 1
+                stats['llms'][provider] = stats['llms'].get(provider, 0) + 1
 
                 # Technical pattern distribution
                 pattern = metadata.get('technical_pattern', 'Unknown')

@@ -78,7 +78,7 @@ class RAGTester:
 
         for test in filtered_tests:
             print(f"\nTesting: {test['description']}")
-            result = collection.filtered_retrieval(
+            result = collection.filtered_semantic_search(
                 test['query'],
                 test['filters'],
                 n_results=3

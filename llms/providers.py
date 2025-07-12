@@ -2,18 +2,20 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, List
 
 from classification.code_scanner import CodeFile
+from shared.context_providers import BusinessContextProvider
+
 
 class LLMClassifier(ABC):
     """Abstract base class for LLM providers used in code classification."""
 
     @abstractmethod
-    def classify_code(self, code_file: CodeFile) -> Dict[str, Any]:
-        """Classify code file and return semantic information"""
+    def get_provider_name(self) -> str:
+        """Return the name of the LLM provider"""
         pass
 
     @abstractmethod
-    def get_provider_name(self) -> str:
-        """Return the name of the LLM provider"""
+    def classify_code(self, code_file: CodeFile) -> Dict[str, Any]:
+        """Classify code file and return semantic information"""
         pass
 
     @staticmethod
@@ -77,7 +79,7 @@ class LLMClassifier(ABC):
             return []
 
 
-class LLMExecutor(ABC):
+class LLMRecommender(ABC):
     """Abstract base class for LLM providers used to provide code implementations"""
 
     @abstractmethod
@@ -86,9 +88,8 @@ class LLMExecutor(ABC):
         pass
 
     @abstractmethod
-    def suggest_coding_implementation(self, user_request: str,
-                                      context_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Generate answer from code file for provided query"""
+    def fetch_answer(self, context_provider: BusinessContextProvider) -> Dict[str, Any]:
+        """Generate answer from code file for provided query with rag data"""
         pass
 
     @staticmethod
@@ -104,11 +105,4 @@ class LLMExecutor(ABC):
             "confidence_score": 0.0
         }
 
-class LLMOrchestrator(ABC):
-    """Abstract base class for LLM providers used in multi-agent orchestration"""
-
-    @abstractmethod
-    def get_provider_name(self) -> str:
-        """Return the name of the LLM provider"""
-        pass
 

@@ -6,7 +6,7 @@ from typing import List, Dict, Any
 
 
 @dataclass
-class ImplementationSuggestion:
+class CodeSenseAdvice:
     """Represents a complete implementation suggestion"""
     user_request: str
     retrieved_context: List[Dict[str, Any]]
@@ -20,7 +20,7 @@ class ImplementationSuggestion:
     llm_provider: str
     generated_at: str
 
-    def display_suggestion(self):
+    def display(self):
         """Display implementation suggestion in readable format"""
 
         print("\n" + "=" * 60)
@@ -61,7 +61,7 @@ class ImplementationSuggestion:
         for doc in self.retrieved_context:
             print(f"  - {doc['file_path']} (distance: {doc['distance']:.4f})")
 
-    def save_suggestion(self, output_path: str = None):
+    def save(self, output_path: str = None):
         """Save implementation suggestion to file"""
 
         if output_path is None:
@@ -91,7 +91,7 @@ class ImplementationSuggestion:
 
         print(f"Implementation suggestion saved to: {output_path}")
 
-class NoSuggestion(ImplementationSuggestion):
+class FallbackAdvice(CodeSenseAdvice):
     def __init__(self):
         self.user_request = "no implementation"
         self.retrieved_context = []

@@ -3,9 +3,9 @@ from typing import Dict, Any, List
 
 import requests
 
-from llm_providers.llm_provider import LLMClassifier, LLMExecutor
-from llm_providers.utils.prompt_builders import PromptBuilder
-from llm_providers.utils.response_validation import validate_implementation_response, get_fallback_implementation
+from llms.providers import LLMClassifier, LLMRecommender
+from shared.context_providers import BusinessContextProvider
+from llms.utils.validation import get_validated_answer, get_fallback_answer
 
 
 class OpenAIClassifier(LLMClassifier):
@@ -186,8 +186,8 @@ Focus on business impact of these configurations. Return only the JSON object.""
         except Exception:
             return self._get_empty_classification()
 
-class OpenAIExecutor(LLMExecutor):
-    """OpenAI GPT-4 implementation for code classification"""
+class OpenAIRecommender(LLMRecommender):
+    """OpenAI GPT-4 implementation for returning coding implementation suggestions"""
 
     def __init__(self, api_key: str, model: str = "gpt-4.1"):
         self._api_key = api_key
@@ -199,13 +199,11 @@ class OpenAIExecutor(LLMExecutor):
         """Return the name of the LLM provider"""
         return f"OpenAI-{self._model}"
 
-    def suggest_coding_implementation(self, user_request: str, context_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def fetch_answer(self, context_provider: BusinessContextProvider) -> Dict[str, Any]:
         """Generate implementation using OpenAI GPT-4"""
 
         system_message = "You are a senior software architect specializing in microservices implementation. Always respond with valid JSON only."
-
-        pb = PromptBuilder()
-        user_message = pb.create_implementation_prompt(user_request, context_docs)
+        user_message = context_provider.build_prompt()
 
         try:
             headers = {
@@ -241,11 +239,11 @@ class OpenAIExecutor(LLMExecutor):
             except json.JSONDecodeError:
                 implementation = self._extract_json_from_text(generated_text)
 
-            return validate_implementation_response(implementation)
+            return get_validated_answer(implementation)
 
         except Exception as e:
             print(f"Error calling OpenAI: {e}")
-            return get_fallback_implementation(user_request)
+            return get_fallback_answer(context_provider.user_request)
 
     def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
         """Extract JSON from OpenAI response that might contain additional content"""

@@ -1,12 +1,11 @@
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 import requests
 
-from llm_providers.llm_provider import LLMClassifier, LLMExecutor
-from llm_providers.utils.response_validation import validate_implementation_response, get_fallback_implementation
-from llm_providers.utils.prompt_builders import PromptBuilder
-
+from llms.providers import LLMClassifier, LLMRecommender
+from llms.utils.validation import get_validated_answer, get_fallback_answer
+from shared.context_providers import BusinessContextProvider
 
 class AnthropicClassifier(LLMClassifier):
     """Anthropic Claude implementation for code classification"""
@@ -187,8 +186,8 @@ Focus on the business impact and integration semantics of these configurations. 
             return self._get_empty_classification()
 
 
-class AnthropicExecutor(LLMExecutor):
-    """Anthropic Claude implementation for code classification"""
+class AnthropicRecommender(LLMRecommender):
+    """Anthropic Claude implementation for returning coding implementation suggestions"""
 
     def __init__(self, api_key: str, model: str = "claude-3-5-sonnet-20241022"):
         self._api_key = api_key
@@ -200,11 +199,10 @@ class AnthropicExecutor(LLMExecutor):
         """Return the name of the LLM provider"""
         return f"Anthropic-{self._model}"
 
-    def suggest_coding_implementation(self, user_request: str, context_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def fetch_answer(self, context_provider: BusinessContextProvider) -> Dict[str, Any]:
         """Generate implementation using Anthropic Claude"""
 
-        pb = PromptBuilder()
-        prompt = pb.create_implementation_prompt(user_request, context_docs)
+        prompt = context_provider.build_prompt()
 
         try:
             headers = {
@@ -221,7 +219,7 @@ class AnthropicExecutor(LLMExecutor):
             }
 
             response = requests.post(
-                "https://api.anthropic.com/v1/messages",
+                self._base_url,
                 headers=headers,
                 json=payload,
                 timeout=60
@@ -233,15 +231,15 @@ class AnthropicExecutor(LLMExecutor):
 
             # Parse JSON response
             try:
-                implementation = json.loads(generated_text)
+                answer = json.loads(generated_text)
             except json.JSONDecodeError:
-                implementation = self._extract_json_from_text(generated_text)
+                answer = self._extract_json_from_text(generated_text)
 
-            return validate_implementation_response(implementation)
+            return get_validated_answer(answer)
 
         except Exception as e:
             print(f"Error calling Anthropic: {e}")
-            return get_fallback_implementation(user_request)
+            return get_fallback_answer(context_provider.user_request)
 
     def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
         """Extract JSON from Claude's response that might contain additional content"""

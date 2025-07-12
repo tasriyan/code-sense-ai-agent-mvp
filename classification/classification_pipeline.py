@@ -5,7 +5,7 @@ from typing import List
 
 from classification.classification_result import ClassificationResult as cr, ClassificationResult
 from classification.code_scanner import CodeScanner
-from llm_providers.llm_provider import LLMClassifier
+from llms.providers import LLMClassifier
 
 
 class ClassificationPipeline:

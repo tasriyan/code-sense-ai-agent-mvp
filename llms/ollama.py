@@ -1,10 +1,10 @@
 import json
 import requests
-from typing import Dict, Any, List
+from typing import Dict, Any
 
-from llm_providers.llm_provider import LLMClassifier, LLMExecutor
-from llm_providers.utils.response_validation import validate_implementation_response, get_fallback_implementation
-from llm_providers.utils.prompt_builders import PromptBuilder
+from llms.providers import LLMClassifier, LLMRecommender
+from llms.utils.validation import get_validated_answer, get_fallback_answer
+from shared.context_providers import BusinessContextProvider
 
 class OllamaClassifier(LLMClassifier):
     """Ollama local LLM implementation for CodeLlama"""
@@ -136,8 +136,8 @@ Focus on business impact of these configurations. Return only the JSON, no addit
             return self._get_empty_classification()
 
 
-class OllamaExecutor(LLMExecutor):
-    """Ollama local LLM implementation for CodeLlama"""
+class OllamaRecommender(LLMRecommender):
+    """Ollama local LLM implementation for returning coding implementation suggestions"""
 
     def __init__(self, model: str = "codellama:7b", base_url: str = "http://localhost:11434"):
         self._model = model
@@ -148,15 +148,14 @@ class OllamaExecutor(LLMExecutor):
         """Return the name of the LLM provider"""
         return f"Ollama-{self._model}"
 
-    def suggest_coding_implementation(self, user_request: str, context_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def fetch_answer(self, context_provider: BusinessContextProvider) -> Dict[str, Any]:
         """Generate implementation using Ollama/CodeLlama"""
 
-        pb = PromptBuilder()
-        prompt = pb.create_implementation_prompt(user_request, context_docs)
+        prompt = context_provider.build_prompt()
 
         try:
             response = requests.post(
-                "http://localhost:11434/api/generate",
+                f"{self._base_url}/api/generate",
                 json={
                     "model": "codellama:7b",
                     "prompt": prompt,
@@ -176,11 +175,11 @@ class OllamaExecutor(LLMExecutor):
             except json.JSONDecodeError:
                 implementation = self._extract_json_from_text(generated_text)
 
-            return validate_implementation_response(implementation)
+            return get_validated_answer(implementation)
 
         except Exception as e:
             print(f"Error calling Ollama: {e}")
-            return get_fallback_implementation(user_request)
+            return get_fallback_answer(context_provider.user_request)
 
     def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
         """Extract JSON from text that might contain additional content"""
