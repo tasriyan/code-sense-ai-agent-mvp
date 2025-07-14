@@ -69,10 +69,10 @@ class ConversationContextProvider(BusinessContextProvider):
     def __init__(self, user_request: str, rag_data: RagQueryResult, tool_agent: ToolAgent = None):
         super().__init__(user_request, rag_data)
 
+        self._tool_agent = tool_agent
         self._all_responses = []
         self._conversation_history = self._create_orchestrated_prompt()
         self._tool_responses = []
-        self._tool_agent = tool_agent
 
     def build_prompt(self) -> str:
         """Build prompt from conversation history"""
@@ -96,9 +96,9 @@ class ConversationContextProvider(BusinessContextProvider):
 
             if context_additions:
                 return self._conversation_history[0] + "\n\nEXAMINED CODE:\n" + "\n".join(
-                    context_additions) + "\n\nNow provide final JSON implementation guidance:"
+                    context_additions) + "\n\nNow provide final implementation guidance as JSON:"
 
-        return self._conversation_history[0] + "\n\nProvide implementation guidance as JSON:"
+        return self._conversation_history[0] + "\n\nNow provide implementation guidance as JSON:"
 
     def add_llm_response(self, llm_response):
         self._conversation_history.append(f"LLM Response: {llm_response}")
@@ -156,7 +156,7 @@ TOOL USAGE INSTRUCTIONS:
   * Examine configuration patterns
 - Call tools using this format: get_code_by_filepath("/path/to/file.cs")
 
-Based on the existing codebase patterns and architecture AND examining necessary code files, provide specific implementation guidance. Return ONLY a valid JSON object with this structure:
+Based on the existing codebase patterns and architecture AND examining necessary code files from the tool, provide specific implementation guidance. Return ONLY a valid JSON object with this structure:
 
 {{
     "analysis_performed": [

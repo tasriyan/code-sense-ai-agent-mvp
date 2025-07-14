@@ -9,10 +9,10 @@ class CodeSenseGenerator:
     """Main class for generating implementation suggestions using RAG"""
 
     def __init__(self,
-                 rag: RagSystem,
-                 llm_provider: LLMRecommender):
+                 llm: LLMRecommender,
+                 rag: RagSystem):
         self._rag = rag
-        self._llm = llm_provider
+        self._llm = llm
 
     def fetch_coding_advice(self, user_request: str) -> CodeSenseAdvice:
         """Generate complete implementation suggestion using RAG pipeline"""
