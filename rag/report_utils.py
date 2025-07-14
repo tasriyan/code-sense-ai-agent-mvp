@@ -1,6 +1,8 @@
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 import numpy as np
+
+from vectorization.semantic_match import SemanticMatch
 
 
 def analyze_query_patterns(test_results: Dict[str, Any]) -> Dict[str, Any]:
@@ -21,16 +23,18 @@ def analyze_query_patterns(test_results: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     try:
-        basic_tests = test_results['basic_tests']
+        basic_tests: list[SemanticMatch] = test_results['basic_tests']
 
         # Sort queries by performance (distance)
         query_performance = []
-        for query, result in basic_tests.items():
-            if 'avg_distance' in result['summary']:
+        for basic_test in basic_tests:
+            query = basic_test.query
+            summary = basic_test.summary
+            if 'avg_distance' in summary:
                 query_performance.append({
                     'query': query,
-                    'avg_distance': result['summary']['avg_distance'],
-                    'total_results': result['summary']['total_results']
+                    'avg_distance': summary['avg_distance'],
+                    'total_results': summary['total_results']
                 })
 
         query_performance.sort(key=lambda x: x['avg_distance'])
@@ -50,8 +54,8 @@ def analyze_query_patterns(test_results: Dict[str, Any]) -> Dict[str, Any]:
 
         # File type preferences
         file_type_hits = {}
-        for result in basic_tests.values():
-            for doc in result['results']:
+        for basic_test in basic_tests:
+            for doc in basic_test.results:
                 file_path = doc.get('file_path', '')
                 if file_path.endswith('.cs'):
                     file_type_hits['cs'] = file_type_hits.get('cs', 0) + 1
@@ -62,8 +66,8 @@ def analyze_query_patterns(test_results: Dict[str, Any]) -> Dict[str, Any]:
 
         # Project coverage
         project_hits = {}
-        for result in basic_tests.values():
-            for doc in result['results']:
+        for basic_test in basic_tests:
+            for doc in basic_test.results:
                 project = doc.get('project_name', 'Unknown')
                 project_hits[project] = project_hits.get(project, 0) + 1
 
@@ -74,7 +78,7 @@ def analyze_query_patterns(test_results: Dict[str, Any]) -> Dict[str, Any]:
 
     return analysis
 
-def calculate_performance_metrics(test_results: Dict[str, Any]) -> Dict[str, Any]:
+def calculate_performance_metrics(test_results: Dict[str, List[SemanticMatch]], collection_stats: Dict[str, Any]) -> Dict[str, Any]:
     """ Retrieval success rate: % of queries returning results
         Average distance: Semantic similarity quality
         Query coverage: How many documents are discoverable
@@ -91,30 +95,30 @@ def calculate_performance_metrics(test_results: Dict[str, Any]) -> Dict[str, Any
     try:
         # Basic retrieval success rate
         basic_tests = test_results['basic_tests']
-        successful_queries = sum(1 for result in basic_tests.values()
-                                 if result['summary']['total_results'] > 0)
+        successful_queries = sum(1 for semantic_match in basic_tests
+                                 if semantic_match.summary['total_results'] > 0)
         metrics['retrieval_success_rate'] = successful_queries / len(basic_tests) if basic_tests else 0
 
         # Average distance across all queries
         all_distances = []
-        for result in basic_tests.values():
-            if 'avg_distance' in result['summary']:
-                all_distances.append(result['summary']['avg_distance'])
+        for semantic_match in basic_tests:
+            if 'avg_distance' in semantic_match.summary:
+                all_distances.append(semantic_match.summary['avg_distance'])
         metrics['average_distance'] = np.mean(all_distances) if all_distances else 0
 
         # Query coverage (unique files returned)
         all_files = set()
-        for result in basic_tests.values():
-            all_files.update(result['summary'].get('files_found', []))
+        for semantic_match in basic_tests:
+            all_files.update(semantic_match.summary.get('files_found', []))
 
-        total_docs = test_results['collection_stats']['total_documents']
+        total_docs = collection_stats['total_documents']
         metrics['query_coverage'] = len(all_files) / total_docs if total_docs > 0 else 0
 
         # Filter effectiveness
         filtered_tests = test_results['filtered_tests']
         filter_improvements = []
-        for result in filtered_tests.values():
-            if result['summary']['total_results'] > 0:
+        for semantic_match in filtered_tests:
+            if semantic_match.summary['total_results'] > 0:
                 filter_improvements.append(1)
             else:
                 filter_improvements.append(0)
@@ -125,7 +129,7 @@ def calculate_performance_metrics(test_results: Dict[str, Any]) -> Dict[str, Any
 
     return metrics
 
-def generate_test_report(test_results: Dict[str, Any]) -> str:
+def generate_rag_report(test_results: Dict[str, Any]) -> str:
     """ Detailed performance report with recommendations
         JSON results for programmatic analysis
     """

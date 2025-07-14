@@ -124,7 +124,7 @@ class RAGReportAnalyzer:
             parts = filename.split('.')
 
             # Pattern: embedding_model.dataset.llm_report
-            if len(parts) >= 3:
+            if len(parts) >= 2:
                 embedding_model = parts[0]
             else:
                 # Fallback parsing
@@ -171,6 +171,10 @@ class RAGReportAnalyzer:
         """Extract model name if it contains claude3.5"""
         if "claude3.5" in filename:
             return "claude3.5"
+        if "claude3.7" in filename:
+            return "claude3.7"
+        if "claude4.0" in filename:
+            return "claude4.0"
         elif "gpt4.1" in filename:
             return "gpt4.1"
         elif "codellama" in filename:
