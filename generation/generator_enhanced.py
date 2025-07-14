@@ -13,10 +13,10 @@ class EnhancedCodeSenseGenerator:
 
     def __init__(self,
                  llm: LLMRecommender,
-                 rag_system: RagSystem,
+                 rag: RagSystem,
                  tool_agent: ToolAgent):
         self._llm = llm
-        self._rag_system = rag_system
+        self._rag = rag
         self._tool_agent = tool_agent
         self._max_tool_iterations = 3
 
@@ -52,14 +52,14 @@ class EnhancedCodeSenseGenerator:
         print(f"Provider: {self._llm.get_provider_name()}")
 
         print("\nRetrieving business context via RAG...")
-        rag_query_result = self._rag_system.retrieve_relevant_context(user_request)
+        rag_query_result = self._rag.retrieve_relevant_context(user_request)
 
         print("\nStarting LLM interaction with tool calling...")
         return self._execute_llm_with_tools(user_request, rag_query_result)
 
     def _execute_llm_with_tools(self, user_request: str, rag_query_result: RagQueryResult) -> Dict[str, Any]:
         print("Creating initial prompt with tool availability...")
-        business_context = ConversationContextProvider(user_request=user_request, rag_data=rag_query_result, tool_agent=self._tool_agent)
+        business_context = ConversationContextProvider(user_request, rag_query_result, self._tool_agent)
 
         for iteration in range(self._max_tool_iterations):
             print(f"\n--- LLM Iteration {iteration + 1} ---")
@@ -71,8 +71,7 @@ class EnhancedCodeSenseGenerator:
                 break
 
             # Check if LLM wants to use tools
-            tool_calls = self._tool_agent.parse_tool_calls_from_response(llm_response)
-
+            tool_calls = llm_response.get('tools', [])
             if not tool_calls:
                 print("No tool calls detected. Returning final response...")
                 return llm_response
@@ -80,10 +79,10 @@ class EnhancedCodeSenseGenerator:
             print(f"Executing {len(tool_calls)} tool call(s)...")
 
             for tool_call in tool_calls:
-                print(f"  Calling {tool_call['tool_name']} with {tool_call['parameters']}")
+                print(f"  Calling {tool_call['tool']} with {tool_call['file_path']}")
                 tool_result = self._tool_agent.execute_tool(
-                    tool_call['tool_name'],
-                    **tool_call['parameters']
+                    tool_call['tool'],
+                    **{ 'file_path': tool_call['file_path'] }
                 )
                 if tool_result.success:
                     print(f"  ✓ Success: Retrieved {len(tool_result.result['content'])} characters")
@@ -93,6 +92,6 @@ class EnhancedCodeSenseGenerator:
 
         # If we reach max iterations, try to get final response
         print("Reached max iterations. Requesting final response...")
-        final_prompt = current_prompt + "\n\nProvide your final implementation guidance as JSON now."
+        # final_prompt = business_context._conversation_history + "\n\nProvide your final implementation guidance as JSON now."
         final_response = self._llm.fetch_answer(business_context)
         return final_response

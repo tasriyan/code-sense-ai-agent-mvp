@@ -1,5 +1,6 @@
 import json
-from typing import Dict, Any
+import re
+from typing import Dict, Any, List
 
 import requests
 
@@ -203,6 +204,7 @@ class AnthropicRecommender(LLMRecommender):
         """Generate implementation using Anthropic Claude"""
 
         prompt = context_provider.build_prompt()
+        # to_file(prompt, "prompt.txt")
 
         try:
             headers = {
@@ -229,11 +231,12 @@ class AnthropicRecommender(LLMRecommender):
             anthropic_response = response.json()
             generated_text = anthropic_response["content"][0]["text"]
 
+            # to_file(generated_text, "llm_raw.txt")
             # Parse JSON response
             try:
                 answer = json.loads(generated_text)
             except json.JSONDecodeError:
-                answer = self._extract_json_from_text(generated_text)
+                answer = self.extract_json_from_text(generated_text)
 
             return get_validated_answer(answer)
 
@@ -241,29 +244,80 @@ class AnthropicRecommender(LLMRecommender):
             print(f"Error calling Anthropic: {e}")
             return get_fallback_answer(context_provider.user_request)
 
-    def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
-        """Extract JSON from Claude's response that might contain additional content"""
+    def extract_json_from_text(self, text: str) -> Dict[str, Any]:
+        """Extract JSON and tool calls from Claude's response that might contain additional content"""
         try:
-            # Claude sometimes wraps JSON in code blocks
-            if "```json" in text:
-                start_marker = "```json"
-                end_marker = "```"
-                start_idx = text.find(start_marker) + len(start_marker)
-                end_idx = text.find(end_marker, start_idx)
-                if end_idx != -1:
-                    json_str = text[start_idx:end_idx].strip()
-                    return json.loads(json_str)
+            result = {}
 
-            # Try to find JSON object in the text
-            start_idx = text.find('{')
-            end_idx = text.rfind('}') + 1
+            # Check for tool calls in code blocks
+            tool_calls = self._extract_tool_calls(text)
+            if tool_calls:
+                result['tools'] = tool_calls
 
-            if start_idx != -1 and end_idx != 0:
-                json_str = text[start_idx:end_idx]
-                return json.loads(json_str)
+            # Extract JSON response
+            json_data = self._extract_json_response(text)
+            if json_data:
+                result['response'] = json_data
             else:
-                return self._get_empty_implementation()
+                # If no JSON found but we have tools, return tools only
+                if tool_calls:
+                    return result
+                else:
+                    return self._get_empty_implementation(text)
 
-        except Exception:
-            return self._get_empty_implementation()
+            # If we have both tools and response, return the combined result
+            # If we only have response (no tools), return just the response for backward compatibility
+            return result if tool_calls else json_data
+
+        except Exception as e:
+            print(f"Error loading json: {e}")
+            return self._get_empty_implementation(text)
+
+    def _extract_tool_calls(self, text: str) -> List[Dict[str, Any]]:
+        """Extract tool calls from code blocks"""
+        tool_calls = []
+
+        # Find TypeScript/JavaScript code blocks
+        code_block_pattern = r'```(?:typescript|javascript|ts|js)?\s*\n(.*?)\n```'
+        if not code_block_pattern:
+            return tool_calls
+
+        code_blocks = re.findall(code_block_pattern, text, re.DOTALL)
+
+        for code_block in code_blocks:
+            # Look for tool calls like get_code_by_filepath("path")
+            tool_call_pattern = r'(\w+)\s*=\s*get_code_by_filepath\s*\(\s*["\']([^"\']+)["\']\s*\)'
+            matches = re.findall(tool_call_pattern, code_block)
+
+            for variable_name, file_path in matches:
+                tool_calls.append({
+                    'tool': 'get_code_by_filepath',
+                    'variable': variable_name,
+                    'file_path': file_path,
+                    'raw_code': code_block.strip()
+                })
+
+        return tool_calls
+
+    def _extract_json_response(self, text: str) -> Dict[str, Any]:
+        """Extract JSON response from text"""
+        # Claude sometimes wraps JSON in code blocks
+        if "```json" in text:
+            start_marker = "```json"
+            end_marker = "```"
+            start_idx = text.find(start_marker) + len(start_marker)
+            end_idx = text.find(end_marker, start_idx)
+            if end_idx != -1:
+                json_str = text[start_idx:end_idx].strip()
+                return json.loads(json_str)
+
+        # Try to find JSON object in the text
+        start_idx = text.find('{')
+        end_idx = text.rfind('}') + 1
+
+        if start_idx != -1 and end_idx != 0:
+            json_str = text[start_idx:end_idx]
+            return json.loads(json_str)
+
+        return None
 

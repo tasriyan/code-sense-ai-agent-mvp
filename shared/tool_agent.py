@@ -136,28 +136,3 @@ class ToolAgent:
             )
 
         return self.tools[tool_name].execute(**kwargs)
-
-    def parse_tool_calls_from_response(self, llm_response: str) -> List[Dict[str, Any]]:
-        """Parse tool calls from LLM response (naive implementation)"""
-        tool_calls = []
-
-        # Look for tool call patterns in the response
-        # This is a naive implementation - in production, use proper function calling
-        lines = llm_response.split('\n')
-        for line in lines:
-            line = line.strip()
-            if line.startswith('get_code_by_filepath('):
-                # Extract file path from function call
-                try:
-                    start = line.find('("') + 2
-                    end = line.find('")', start)
-                    if start > 1 and end > start:
-                        file_path = line[start:end]
-                        tool_calls.append({
-                            'tool_name': 'get_code_by_filepath',
-                            'parameters': {'file_path': file_path}
-                        })
-                except:
-                    continue
-
-        return tool_calls

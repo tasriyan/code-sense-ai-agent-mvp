@@ -193,7 +193,7 @@ class OllamaRecommender(LLMRecommender):
                 return json.loads(json_str)
             else:
                 # If no JSON found, return empty structure
-                return self._get_empty_implementation()
+                return self._get_empty_implementation(text)
 
         except Exception:
-            return self._get_empty_implementation()
+            return self._get_empty_implementation(text)

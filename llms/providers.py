@@ -93,7 +93,7 @@ class LLMRecommender(ABC):
         pass
 
     @staticmethod
-    def _get_empty_implementation() -> Dict[str, Any]:
+    def _get_empty_implementation(text: str) -> Dict[str, Any]:
         """Return empty implementation structure"""
         return {
             "suggested_service": "Unknown",
@@ -102,7 +102,8 @@ class LLMRecommender(ABC):
             "business_rationale": "Could not analyze request",
             "integration_points": [],
             "code_examples": [],
-            "confidence_score": 0.0
+            "confidence_score": 0.0,
+            "llm_response": text
         }
 
 

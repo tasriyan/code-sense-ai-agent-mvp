@@ -260,7 +260,7 @@ class OpenAIRecommender(LLMRecommender):
                 json_str = text[start_idx:end_idx]
                 return json.loads(json_str)
             else:
-                return self._get_empty_implementation()
+                return self._get_empty_implementation(text)
 
         except Exception:
-            return self._get_empty_implementation()
+            return self._get_empty_implementation(text)
